@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>🦄 Unicorn Rainbow Dash</title>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+            font-family: system-ui, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(#8ec5fc, #e0c3fc);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Responsive canvas container */
+        .wrap {
+            width: min(92vw, 900px);
+            aspect-ratio: 3 / 2;
+            /* keeps the 600x400 feel */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            background: #ffffffaa;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Small helper hint */
+        .hint {
+            position: fixed;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ffffffcc;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 14px;
+            color: #333;
+            user-select: none;
+            pointer-events: none;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <canvas id="game"></canvas>
+    </div>
+    <div class="hint">Tap / Click / Space to jump</div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+
+        // Design resolution (all game logic uses these coordinates)
+        const WORLD_W = 600;
+        const WORLD_H = 400;
+
+        // Match canvas drawing buffer to the displayed size for crisp rendering
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+            canvas.width = Math.round(rect.width * dpr);
+            canvas.height = Math.round(rect.height * dpr);
+
+            // Map our "world" coordinates to the actual pixel buffer
+            ctx.setTransform(canvas.width / WORLD_W, 0, 0, canvas.height / WORLD_H, 0, 0);
+            ctx.imageSmoothingEnabled = true;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const unicorn = {
+            x: 80,
+            y: 200,
+            dy: 0
+        };
+
+        const gravity = 0.4;
+        const jumpPower = -7;
+
+        let stars = [];
+        let score = 0;
+        let gameOver = false;
+
+        // 🌈 Rainbow trail particles
+        let rainbowTrail = [];
+
+        function spawnStar() {
+            stars.push({
+                x: WORLD_W + 20,
+                y: Math.random() * (WORLD_H - 40) + 20,
+                size: 10
+            });
+        }
+
+        function drawRainbowTrail() {
+            rainbowTrail.forEach(p => {
+                ctx.fillStyle = `hsla(${p.hue}, 100%, 60%, ${p.life / 30})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawUnicorn() {
+            ctx.font = '32px serif';
+            ctx.fillText('🦄', unicorn.x, unicorn.y);
+        }
+
+        function drawStars() {
+            ctx.font = '16px serif';
+            stars.forEach(s => ctx.fillText('⭐', s.x, s.y));
+        }
+
+        function update() {
+            if (gameOver) return;
+
+            unicorn.dy += gravity;
+            unicorn.y += unicorn.dy;
+
+            if (unicorn.y > WORLD_H - 10) {
+                unicorn.y = WORLD_H - 10;
+                unicorn.dy = 0;
+            }
+            if (unicorn.y < 20) {
+                unicorn.y = 20;
+                unicorn.dy = 0;
+            }
+
+            // 🌈 Add rainbow particles behind unicorn
+            rainbowTrail.push({
+                x: unicorn.x - 5,
+                y: unicorn.y - 20,
+                life: 30,
+                hue: Math.random() * 360
+            });
+
+            // Move + fade particles
+            rainbowTrail.forEach(p => {
+                p.x -= 2;
+                p.life--;
+            });
+
+            // Remove dead particles
+            rainbowTrail = rainbowTrail.filter(p => p.life > 0);
+
+            // Move stars
+            stars.forEach(s => s.x -= 3);
+
+            // Collisions + cleanup
+            stars = stars.filter(s => {
+                const hit = Math.abs(s.x - unicorn.x) < 20 && Math.abs(s.y - unicorn.y) < 20;
+                if (hit) score++;
+                return s.x > -20 && !hit;
+            });
+        }
+
+        function drawUI() {
+            ctx.fillStyle = '#333';
+            ctx.font = '18px system-ui';
+            ctx.fillText(`Score: ${score}`, 10, 24);
+
+            if (gameOver) {
+                ctx.font = '32px system-ui';
+                ctx.fillText('Game Over 💥', 200, 200);
+            }
+        }
+
+        function loop() {
+            // Clear using world units
+            ctx.clearRect(0, 0, WORLD_W, WORLD_H);
+
+            // 🌈 draw trail first so unicorn is on top
+            drawRainbowTrail();
+            drawUnicorn();
+            drawStars();
+            drawUI();
+
+            update();
+            requestAnimationFrame(loop);
+        }
+
+        function jump() {
+            if (gameOver) return;
+            unicorn.dy = jumpPower;
+        }
+
+        // Desktop keyboard
+        document.addEventListener('keydown', e => {
+            if (e.code === 'Space') jump();
+        });
+
+        // Mobile touch + desktop click on canvas
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            jump();
+        }, { passive: false });
+
+        canvas.addEventListener('mousedown', () => jump());
+
+        setInterval(spawnStar, 1200);
+        loop();
+    </script>
+</body>
+
+</html>
